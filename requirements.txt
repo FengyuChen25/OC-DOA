@@ -1,0 +1,13 @@
+# CPU build of PyTorch for Binder (no GPU on Binder sessions)
+# If running locally with a GPU, replace the torch line with the matching CUDA wheel.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1+cpu
+numpy==1.26.4
+scipy==1.13.1
+matplotlib==3.9.2
+torchinfo==1.8.0
+einops==0.8.0
+timm==1.0.9
+joblib==1.4.2
+scikit-learn==1.5.2
+tqdm==4.66.5
