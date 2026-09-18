@@ -39,7 +39,7 @@ Result figures (PDF) and RMSE tables (CSV) are saved to `pic_final/`.
 Click the badge below to launch an executable environment in your browser —
 no local installation required:
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/FengyuChen25/Asubmmit/HEAD)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/FengyuChen25/OC-DOA/HEAD)
 
 ## Notes
 
