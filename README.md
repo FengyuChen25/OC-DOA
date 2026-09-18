@@ -41,6 +41,26 @@ no local installation required:
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/FengyuChen25/OC-DOA/HEAD)
 
+### How to run inside Binder (JupyterLab)
+
+1. **Console / Notebook cell** — open a Python console (Launcher → Console) or a
+   notebook, then run:
+   ```python
+   %run Asimulation_final1.py
+   ```
+2. **Terminal** — open a Terminal (Launcher → Terminal), then run:
+   ```bash
+   python Asimulation_final1.py
+   ```
+
+> **Note**: `python Asimulation_final1.py` works only in a **Terminal**;
+> inside a Console/Notebook cell use `%run Asimulation_final1.py` (a cell is a
+> Python interpreter, not a shell).
+>
+> The full Monte-Carlo loop takes a while on Binder's CPU; set `num_epoch = 5`
+> in `Asimulation_final1.py` for a quick smoke test before running the full
+> experiment.
+
 ## Notes
 
 - Model weights are stored with Git LFS; Binder pulls them automatically.
