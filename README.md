@@ -1,8 +1,9 @@
-# OC-DOA: DOA Estimation with Orthogonal-Basis CNN
+# OC-DOA: Deep Learning Framework using Orthogonal Coefficient Supervision for High-Accuracy Gridless DOA Estimation
 
 Code for the paper **"OC-DOA"** — direction-of-arrival (DOA) estimation using
-an orthogonal-basis CNN, benchmarked against HMC-ViT, LowSNR-CNN, MUSIC, CBF,
-and the Cramér–Rao Bound (CRB) under a uniform linear array (ULA, M = 16).
+orthogonal coefficient supervision, benchmarked against HMC-ViT, LowSNR-CNN,
+MUSIC, CBF, and the Cramér–Rao Bound (CRB) under a uniform linear array
+(ULA, M = 16).
 
 ## Repository structure
 
