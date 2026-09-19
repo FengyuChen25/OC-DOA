@@ -21,7 +21,7 @@ from datetime import datetime
 
 def main():
     model_config = {
-        'run_obcnn': True,
+        'run_ocdoa': True,
         'run_lowsnrcnn': True,
         'run_music': True,
         'run_cbf': True,
@@ -62,12 +62,12 @@ def main():
 
     # 模型加载
     models = {}
-    if model_config['run_obcnn']:
-        models['obcnn'] = OrthoBasisCNN1D(input_length=120, output_dim=32).to(device)
-        models['obcnn'].load_state_dict(torch.load('ocdoa/best_model_obmodel1.pth', map_location=device))
+    if model_config['run_ocdoa']:
+        models['ocdoa'] = OrthoBasisCNN1D(input_length=120, output_dim=32).to(device)
+        models['ocdoa'].load_state_dict(torch.load('ocdoa/best_model_obmodel1.pth', map_location=device))
         #_, _, base_info = load_orthobasis_data("orthobasis_data_M16")
         base_info = np.load(os.path.join("orthobasis_data_M16", 'base_info.npy'), allow_pickle=True).item()
-        models['obcnn_base_info'] = base_info
+        models['ocdoa_base_info'] = base_info
 
     if model_config['run_lowsnrcnn']:
         models['lowsnrcnn'] = lowsnr_cnn().to(device)
@@ -103,7 +103,7 @@ def main():
 
 # RMSE初始化
     RMSE_dict = {
-        'obcnn': [], 'lowsnrcnn': [], 'hmcvit': [],
+        'ocdoa': [], 'lowsnrcnn': [], 'hmcvit': [],
         'MUSIC': [], 'MUSIC_01': [], 'CBF': [], 'CBF_01': [], 'crb': []
     }
 
@@ -171,7 +171,7 @@ def main():
         for epoch in range(num_epoch):
             epoch_est = {
                 'true': np.sort(DOA.copy()),
-                'obcnn': None,
+                'ocdoa': None,
                 'music01': None
             }
 
@@ -183,7 +183,7 @@ def main():
             # 生成统一 Rx（所有模型共享）
             need_Rx = ( model_config['run_music'] or
                        model_config['run_cbf'] or model_config['run_hmcvit'] or
-                       model_config['run_lowsnrcnn'] or model_config['run_obcnn'])
+                       model_config['run_lowsnrcnn'] or model_config['run_ocdoa'])
             if need_Rx:
                 Rx = generate_unified_Rx(DOA, M, N, SNR, wavelength=0.3,
                                          power_ratio=current_power_ratio,
@@ -196,10 +196,10 @@ def main():
                 input_array = np.array(data_lowsnrcnn['input'])
                 data_tensor_lowsnrcnn = torch.tensor(input_array, dtype=torch.float32)
 
-            if model_config['run_obcnn']:
-                data_obcnn = extract_obcnn_features(Rx, M)
-                input_obcnn = torch.from_numpy(np.array(data_obcnn['input'])).float()
-                input_obcnn = input_obcnn.reshape(-1, 2, 1, 120).to(device)
+            if model_config['run_ocdoa']:
+                data_ocdoa = extract_obcnn_features(Rx, M)
+                input_ocdoa = torch.from_numpy(np.array(data_ocdoa['input'])).float()
+                input_ocdoa = input_ocdoa.reshape(-1, 2, 1, 120).to(device)
 
             # ═══════════════════════════════════════
             # Perturbation: 相位误差 → 污染统一 Rx → 重提取特征
@@ -207,7 +207,7 @@ def main():
             # ═══════════════════════════════════════
 
             if phase_error_flag and delta_p_deg > 0:
-                # 论文(42): φ_m = √12·σ·η_m, η_m~U[-0.5,0.5] (均匀, std=σ)
+                # φ_m = √12·σ·η_m, η_m~U[-0.5,0.5] (均匀, std=σ)
                 eta = np.random.rand(M) - 0.5
                 phase_err_deg = np.sqrt(12) * delta_p_deg * eta
                 P_err = np.diag(np.exp(1j * phase_err_deg * np.pi / 180))
@@ -215,9 +215,9 @@ def main():
                 if model_config['run_lowsnrcnn']:
                     data_lowsnrcnn = extract_lowsnrcnn_features(Rx, M)
                     data_tensor_lowsnrcnn = torch.tensor(np.array(data_lowsnrcnn['input']), dtype=torch.float32)
-                if model_config['run_obcnn']:
-                    data_obcnn = extract_obcnn_features(Rx, M)
-                    input_obcnn = torch.from_numpy(np.array(data_obcnn['input'])).float().reshape(-1, 2, 1, 120).to(device)
+                if model_config['run_ocdoa']:
+                    data_ocdoa = extract_obcnn_features(Rx, M)
+                    input_ocdoa = torch.from_numpy(np.array(data_ocdoa['input'])).float().reshape(-1, 2, 1, 120).to(device)
 
             # MUSIC计算
             if model_config['run_music']:
@@ -354,33 +354,33 @@ def main():
                     epoch_est['lowsnrcnn'] = doa_est.copy()
 
 
-            #obcnn评估
-            if model_config['run_obcnn']:
-                models['obcnn'].eval()
+            #ocdoa评估
+            if model_config['run_ocdoa']:
+                models['ocdoa'].eval()
                 with torch.no_grad():
-                    coeff_pred = models['obcnn'](input_obcnn)
+                    coeff_pred = models['ocdoa'](input_ocdoa)
                     coeff_pred = coeff_pred.cpu().numpy().squeeze()
 
 
                     estimated_angles, _, magnitudes_norm = estimate_angles_from_coefficients_ESPRIT(
-                        coeff_pred, models['obcnn_base_info'], max_sources=K
+                        coeff_pred, models['ocdoa_base_info'], max_sources=K
                     )
 
                     # 提取前K个角度
-                    doa_est_obcnn = estimated_angles[:K]
+                    doa_est_ocdoa = estimated_angles[:K]
                     # 角度匹配：匈牙利算法
                     true_angles_sorted = np.sort(DOA)
-                    cost_matrix = np.abs(doa_est_obcnn.reshape(-1, 1) - true_angles_sorted.reshape(1, -1))
+                    cost_matrix = np.abs(doa_est_ocdoa.reshape(-1, 1) - true_angles_sorted.reshape(1, -1))
                     row_ind, col_ind = linear_sum_assignment(cost_matrix)
-                    obcnn_errors = np.zeros(K)
+                    ocdoa_errors = np.zeros(K)
                     for i, (r, c) in enumerate(zip(row_ind, col_ind)):
                         if i < K:
-                            obcnn_errors[i] = cost_matrix[r, c]
+                            ocdoa_errors[i] = cost_matrix[r, c]
 
                     # MSE计算
-                    mse_obcnn = np.square(obcnn_errors)
-                    MSE_dict['obcnn'] += mse_obcnn
-                    epoch_est['obcnn'] = doa_est_obcnn.copy()
+                    mse_ocdoa = np.square(ocdoa_errors)
+                    MSE_dict['ocdoa'] += mse_ocdoa
+                    epoch_est['ocdoa'] = doa_est_ocdoa.copy()
 
             # 打印中间结果
             if epoch % 10 == 0:
@@ -389,11 +389,11 @@ def main():
                 if decision == "power_ratio":
                     print(f"当前功率比: {power_ratio} (signal2/signal1)")  # 修正标注
 
-                if model_config['run_obcnn'] and epoch_est['obcnn'] is not None:
-                    obcnn_errors = np.abs(epoch_est['obcnn'] - epoch_est['true'])
-                    avg_error = np.mean(obcnn_errors)
-                    print(f"OBCNN估计角度: {np.round(epoch_est['obcnn'], 2)}°")
-                    print(f"OBCNN匹配误差: {np.round(obcnn_errors, 2)}° (平均: {np.round(avg_error, 2)}°)")
+                if model_config['run_ocdoa'] and epoch_est['ocdoa'] is not None:
+                    ocdoa_errors = np.abs(epoch_est['ocdoa'] - epoch_est['true'])
+                    avg_error = np.mean(ocdoa_errors)
+                    print(f"ocdoa估计角度: {np.round(epoch_est['ocdoa'], 2)}°")
+                    print(f"ocdoa匹配误差: {np.round(ocdoa_errors, 2)}° (平均: {np.round(avg_error, 2)}°)")
 
 
 
@@ -488,7 +488,7 @@ def main():
 
         # 打印RMSE汇总
         print(f"\n===== {decision}={rho} =====")
-        print(f"  OBCNN={RMSE_dict['obcnn'][-1]:.4f}" if model_config['run_obcnn'] else "", end="")
+        print(f"  ocdoa={RMSE_dict['ocdoa'][-1]:.4f}" if model_config['run_ocdoa'] else "", end="")
 
         print(f"  CNN={RMSE_dict['lowsnrcnn'][-1]:.4f}" if model_config['run_lowsnrcnn'] else "", end="")
         print(f"  MUSIC_1={RMSE_dict['MUSIC'][-1]:.4f}" if model_config['run_music'] else "", end="")
@@ -504,7 +504,7 @@ def main():
     x_uniform = np.linspace(min(Rho), max(Rho), len(Rho))
 
     plot_config = [
-        ('obcnn', 'purple', 'P', '-', 'OC-DOA'),
+        ('ocdoa', 'purple', 'P', '-', 'OC-DOA'),
         ('lowsnrcnn', 'blue', 's', '-', 'CNN'),
         ('MUSIC', 'green', 'D', '-', 'MUSIC with grid 1°'),
         ('MUSIC_01', 'green', 'D', '--', 'MUSIC with grid 0.1°'),
@@ -550,7 +550,7 @@ def main():
     # Build transposed table: rows=methods, columns=rho values
     methods = []
     methods.append(('CRB', RMSE_dict['crb']))
-    if model_config['run_obcnn']: methods.append(('OBCNN', RMSE_dict['obcnn']))
+    if model_config['run_ocdoa']: methods.append(('ocdoa', RMSE_dict['ocdoa']))
     if model_config['run_lowsnrcnn']: methods.append(('CNN', RMSE_dict['lowsnrcnn']))
     if model_config['run_hmcvit']: methods.append(('HMCViT', RMSE_dict['hmcvit']))
     if model_config['run_music']:
