@@ -29,17 +29,17 @@ def main():
     }
 
 
-    decision = "phase_error"  # 可选：N/SNR/angle/power_ratio/phase_error/correlation
+    decision = "phase_error"  # options: N/SNR/angle/power_ratio/phase_error/correlation
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-    # 自定义信源角度
+    # Custom source angles
     DOA = np.array([-34.64,-8.31])
     #DOA = np.array([-34.64, -8.31, 12.45])
     #DOA = np.array([-34.64,-8.31,12.45,28.57])
-    #DOA = np.array([-14.65, -7.38])#测相干性用小间隔角度
+    #DOA = np.array([-14.65, -7.38])# small-angle separation for coherence tests
 
-    K = len(DOA) # 支持2/3/4信源
+    K = len(DOA) # supports 2/3/4 sources
 
 
     base_doa = DOA[0]
@@ -60,7 +60,7 @@ def main():
     d = (np.arange(M) * wavelength / 2).reshape(-1, 1)
     dd = (np.arange(M) * wavelength / 2).reshape(-1, 1)
 
-    # 模型加载
+    # Model loading
     models = {}
     if model_config['run_ocdoa']:
         models['ocdoa'] = OrthoBasisCNN1D(input_length=120, output_dim=32).to(device)
@@ -81,7 +81,7 @@ def main():
         models['hmcvit'].eval()
         models['hmcvit_grid'] = np.linspace(-60, 60, 121)
 
-    # 实验参数配置
+    # Experiment parameter configuration
     if decision == "N":
         Rho = [30, 50, 100, 200, 300, 400, 500, 600, 700, 800, 1000]
         plt.xlabel('Number of snapshots', fontsize=9)
@@ -92,16 +92,16 @@ def main():
         Rho = [2, 4, 6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
         plt.xlabel('DOA separation(degree)', fontsize=9)
     elif decision == "power_ratio":
-        Rho =  [1 + 1*i for i in range(8)]  # 2信源：信号2功率/信号1功率
+        Rho =  [1 + 1*i for i in range(8)]  # 2 sources: power(signal2)/power(signal1)
         plt.xlabel('Power ratio (signal2/signal1)', fontsize=9)
     elif decision == "phase_error":
-        Rho = [0, 2, 5, 10, 15, 20, 25, 30, 35, 40]  # 相位误差标准差 σ (degree)
+        Rho = [0, 2, 5, 10, 15, 20, 25, 30, 35, 40]  # phase-error std σ (degree)
         plt.xlabel(r'Phase Error $\sigma_{\varphi}$ (degree)', fontsize=9)
     elif decision == "correlation":
         Rho = np.arange(0, 1.1, 0.1)
         plt.xlabel('Source Correlation Coefficient $\\rho$', fontsize=9)
 
-# RMSE初始化
+# RMSE initialization
     RMSE_dict = {
         'ocdoa': [], 'lowsnrcnn': [], 'hmcvit': [],
         'MUSIC': [], 'MUSIC_01': [], 'CBF': [], 'CBF_01': [], 'crb': []
@@ -114,7 +114,7 @@ def main():
     amp_error_flag = False; amp_error_delta = 0
     A_amp = np.eye(M); P_err = np.eye(M)
     for rho_idx, rho in enumerate(Rho):
-        # 参数赋值
+        # Parameter assignment
         if decision == "N":
             N = int(rho)
             D_num1 = N
@@ -151,7 +151,7 @@ def main():
             SNR = SNR_init
             power_ratio = 1
             delta_p_deg = float(rho)  # rho = σ (degrees)
-            delta_p = delta_p_deg  # 接线: CRB 的相位误差模型用同一参数
+            delta_p = delta_p_deg  # the same phase-error parameter is used by the CRB model
             phase_error_flag = True
             file_plt = f'./pic_final/{ts_prefix}_PHASE_ERR_{DOA[0]}_{DOA[1]}_SNR{SNR}_N{N}.pdf'
         elif decision == "correlation":
@@ -176,11 +176,11 @@ def main():
             }
 
             # ═══════════════════════════════════════
-            # 统一信号生成 (generate_unified_Rx) + 统一特征提取
+            # Unified signal generation (generate_unified_Rx) + unified feature extraction
             # ═══════════════════════════════════════
             current_power_ratio = power_ratio if decision == "power_ratio" else 1.0
 
-            # 生成统一 Rx（所有模型共享）
+            # Generate a unified Rx shared by all models
             need_Rx = ( model_config['run_music'] or
                        model_config['run_cbf'] or model_config['run_hmcvit'] or
                        model_config['run_lowsnrcnn'] or model_config['run_ocdoa'])
@@ -189,7 +189,7 @@ def main():
                                          power_ratio=current_power_ratio,
                                          correlation_rho=correlation_rho if correlation_flag else 0.0)
 
-            # 从统一 Rx 提取各模型特征
+            # Extract per-model features from the unified Rx
 
             if model_config['run_lowsnrcnn']:
                 data_lowsnrcnn = extract_lowsnrcnn_features(Rx, M)
@@ -202,12 +202,12 @@ def main():
                 input_ocdoa = input_ocdoa.reshape(-1, 2, 1, 120).to(device)
 
             # ═══════════════════════════════════════
-            # Perturbation: 相位误差 → 污染统一 Rx → 重提取特征
-            # 相干已在 generate_unified_Rx 中注入
+            # Perturbation: phase error → contaminate unified Rx → re-extract features
+            # Coherence is already injected inside generate_unified_Rx
             # ═══════════════════════════════════════
 
             if phase_error_flag and delta_p_deg > 0:
-                # φ_m = √12·σ·η_m, η_m~U[-0.5,0.5] (均匀, std=σ)
+                # φ_m = √12·σ·η_m, η_m~U[-0.5,0.5] (uniform, std=σ)
                 eta = np.random.rand(M) - 0.5
                 phase_err_deg = np.sqrt(12) * delta_p_deg * eta
                 P_err = np.diag(np.exp(1j * phase_err_deg * np.pi / 180))
@@ -219,13 +219,13 @@ def main():
                     data_ocdoa = extract_obcnn_features(Rx, M)
                     input_ocdoa = torch.from_numpy(np.array(data_ocdoa['input'])).float().reshape(-1, 2, 1, 120).to(device)
 
-            # MUSIC计算
+            # MUSIC computation
             if model_config['run_music']:
                 ev, I = np.linalg.eig(Rx)
-                sorted_indices = np.argsort(ev)  # 升序: [0]最小特征值, [-1]最大
-                U = np.asmatrix(I[:, sorted_indices[:-K]])  # 噪声子空间 = M-K 个最小特征向量
+                sorted_indices = np.argsort(ev)  # ascending: [0] smallest eigenvalue, [-1] largest
+                U = np.asmatrix(I[:, sorted_indices[:-K]])  # noise subspace = M-K smallest eigenvectors
 
-                # MUSIC 1°网格
+                # MUSIC 1° grid
                 P_MUSIC = np.zeros(120)
                 for i in range(120):
                     doa = 1 * i - 60
@@ -242,7 +242,7 @@ def main():
                     doa_music = doa_music[:K]
                 MSE_dict['MUSIC'] += np.square(doa_music - DOA)
 
-                # MUSIC 0.1°网格
+                # MUSIC 0.1° grid
                 P_MUSIC_01 = np.zeros(1200)
                 for i in range(1200):
                     doa = 0.1 * i - 60
@@ -277,9 +277,9 @@ def main():
                     plt.close(fig_s)
                     print(f"  [MUSIC spectrum saved]")
 
-            # CBF计算
+            # CBF computation
             if model_config['run_cbf']:
-                # CBF 1°网格
+                # CBF 1° grid
                 P_CBF = np.zeros(120)
                 for i in range(120):
                     doa = 1 * i - 60
@@ -295,7 +295,7 @@ def main():
                     doa_cbf = doa_cbf[:K]
                 MSE_dict['CBF'] += np.square(doa_cbf - DOA)
 
-                # CBF 0.1°网格
+                # CBF 0.1° grid
                 P_CBF_01 = np.zeros(1200)
                 for i in range(1200):
                     doa = 0.1 * i - 60
@@ -313,7 +313,7 @@ def main():
 
 
 
-            # HMC-ViT评估
+            # HMC-ViT evaluation
             if model_config['run_hmcvit']:
                 with torch.no_grad():
                     tr = np.trace(np.abs(Rx)) + 1e-12
@@ -324,7 +324,7 @@ def main():
                     hmc_in = hmc_in[:, idx_ut[0], idx_ut[1]]
                     hmc_in_t = torch.from_numpy(hmc_in).float().unsqueeze(0).unsqueeze(2).to(device)
                     hmc_out = torch.sigmoid(models['hmcvit'](hmc_in_t)).detach().cpu().numpy().flatten()
-                    # 局部极大值选峰（相邻bin不能同时入选），不足K个时回退argsort
+                    # Peak selection via local maxima (no adjacent bins); fall back to argsort if fewer than K
                     peaks, _ = find_peaks(hmc_out)
                     if len(peaks) < K:
                         peaks = np.argsort(hmc_out)[::-1][:K]
@@ -333,15 +333,16 @@ def main():
                     if len(hmc_est) < K:
                         hmc_est = np.pad(hmc_est, (0, K - len(hmc_est)), mode='constant')
                     MSE_dict['hmcvit'] += np.square(hmc_est[:K] - DOA)
+                    epoch_est['hmcvit'] = hmc_est[:K].copy()
 
-            # LowSNR-CNN评估
+            # LowSNR-CNN evaluation
             if model_config['run_lowsnrcnn']:
                 models['lowsnrcnn'].eval()
                 with torch.no_grad():
                     result_lowsnrcnn = models['lowsnrcnn'](data_tensor_lowsnrcnn.to(device))
                     result_lowsnrcnn = result_lowsnrcnn.cpu()
                     P_result_lowsnrcnn = result_lowsnrcnn.numpy().squeeze()
-                    # 局部极大值选峰（相邻bin不能同时入选）
+                    # Peak selection via local maxima (no adjacent bins)
                     peaks, _ = find_peaks(P_result_lowsnrcnn)
                     if len(peaks) < K:
                         peaks = np.argsort(P_result_lowsnrcnn)[::-1][:K]
@@ -354,7 +355,7 @@ def main():
                     epoch_est['lowsnrcnn'] = doa_est.copy()
 
 
-            #ocdoa评估
+            # ocdoa evaluation
             if model_config['run_ocdoa']:
                 models['ocdoa'].eval()
                 with torch.no_grad():
@@ -366,9 +367,9 @@ def main():
                         coeff_pred, models['ocdoa_base_info'], max_sources=K
                     )
 
-                    # 提取前K个角度
+                    # Take the first K angles
                     doa_est_ocdoa = estimated_angles[:K]
-                    # 角度匹配：匈牙利算法
+                    # Angle matching: Hungarian algorithm
                     true_angles_sorted = np.sort(DOA)
                     cost_matrix = np.abs(doa_est_ocdoa.reshape(-1, 1) - true_angles_sorted.reshape(1, -1))
                     row_ind, col_ind = linear_sum_assignment(cost_matrix)
@@ -377,42 +378,45 @@ def main():
                         if i < K:
                             ocdoa_errors[i] = cost_matrix[r, c]
 
-                    # MSE计算
+                    # MSE computation
                     mse_ocdoa = np.square(ocdoa_errors)
                     MSE_dict['ocdoa'] += mse_ocdoa
                     epoch_est['ocdoa'] = doa_est_ocdoa.copy()
 
-            # 打印中间结果
+            # Print intermediate results
             if epoch % 10 == 0:
-                print(f"\n===== 实验参数：{decision}={rho} | 蒙特卡洛轮次 {epoch + 1}/{num_epoch} =====")
-                print(f"真实角度 (排序后): {np.round(epoch_est['true'], 2)}°")
+                print(f"\n===== Experiment: {decision}={rho} | Monte-Carlo round {epoch + 1}/{num_epoch} =====")
+                print(f"True angles (sorted): {np.round(epoch_est['true'], 2)}°")
                 if decision == "power_ratio":
-                    print(f"当前功率比: {power_ratio} (signal2/signal1)")  # 修正标注
+                    print(f"Current power ratio: {power_ratio} (signal2/signal1)")
 
                 if model_config['run_ocdoa'] and epoch_est['ocdoa'] is not None:
                     ocdoa_errors = np.abs(epoch_est['ocdoa'] - epoch_est['true'])
                     avg_error = np.mean(ocdoa_errors)
-                    print(f"ocdoa估计角度: {np.round(epoch_est['ocdoa'], 2)}°")
-                    print(f"ocdoa匹配误差: {np.round(ocdoa_errors, 2)}° (平均: {np.round(avg_error, 2)}°)")
+                    print(f"ocdoa estimated angles: {np.round(epoch_est['ocdoa'], 2)}°")
+                    print(f"ocdoa matching errors: {np.round(ocdoa_errors, 2)}° (mean: {np.round(avg_error, 2)}°)")
 
-
+                if model_config['run_hmcvit'] and epoch_est.get('hmcvit') is not None:
+                    hmcvit_errors = np.abs(epoch_est['hmcvit'] - epoch_est['true'])
+                    avg_hmcvit_error = np.mean(hmcvit_errors)
+                    print(f"HMC-ViT estimated angles: {np.round(epoch_est['hmcvit'], 2)}°")
+                    print(f"HMC-ViT matching errors: {np.round(hmcvit_errors, 2)}° (mean: {np.round(avg_hmcvit_error, 2)}°)")
 
                 if model_config['run_lowsnrcnn'] and epoch_est.get('lowsnrcnn') is not None:
                     low_errors = np.abs(epoch_est['lowsnrcnn'] - epoch_est['true'])
                     avg_low_error = np.mean(low_errors)
-                    print(f"CNN(LowSNR)估计角度: {np.round(epoch_est['lowsnrcnn'], 2)}°")
-                    print(f"CNN(LowSNR)匹配误差: {np.round(low_errors, 2)}° (平均: {np.round(avg_low_error, 2)}°)")
-
+                    print(f"CNN (LowSNR) estimated angles: {np.round(epoch_est['lowsnrcnn'], 2)}°")
+                    print(f"CNN (LowSNR) matching errors: {np.round(low_errors, 2)}° (mean: {np.round(avg_low_error, 2)}°)")
 
                 if model_config['run_music'] and epoch_est['music01'] is not None:
                     music01_errors = np.abs(epoch_est['music01'] - epoch_est['true'])
                     avg_music01_error = np.mean(music01_errors)
-                    print(f"MUSIC(0.1°)估计角度: {np.round(epoch_est['music01'], 2)}°")
-                    print(f"MUSIC(0.1°)匹配误差: {np.round(music01_errors, 2)}° (平均: {np.round(avg_music01_error, 2)}°)")
+                    print(f"MUSIC (0.1°) estimated angles: {np.round(epoch_est['music01'], 2)}°")
+                    print(f"MUSIC (0.1°) matching errors: {np.round(music01_errors, 2)}° (mean: {np.round(avg_music01_error, 2)}°)")
 
                 print("-" * 80)
 
-        # CRB计算
+        # CRB computation
         steering = np.zeros((Num_array, K), dtype=np.complex128)
         steering_deriv = np.zeros((Num_array, K), dtype=np.complex128)
         for J in range(K):
@@ -437,7 +441,7 @@ def main():
         n_power_prior0 = 1
         n_power_prior1 = 1 / (10 ** (SNR / 10)) * n_power_prior0
 
-        # 统一功率比适配
+        # Unified power-ratio adaptation
         if K == 2:
             signal_power = np.array([1, current_power_ratio])
         elif K == 3:
@@ -446,8 +450,8 @@ def main():
             signal_power = np.array([1, current_power_ratio, current_power_ratio**2, current_power_ratio**3])
         else:
             signal_power = np.ones(K)
-        # 归一化总功率
-        signal_power = signal_power / signal_power.sum()  # 总功率归一化到1，SNR对齐统一生成
+        # Normalize total power
+        signal_power = signal_power / signal_power.sum()  # normalize total power to 1 so SNR matches the unified generator
         Rs = np.diag(signal_power)
         # Inject source correlation into CRB when applicable
         if decision == "correlation" and correlation_rho > 0:
@@ -466,7 +470,7 @@ def main():
         DOA_CRB01 = np.sqrt(np.mean(np.diag(np.asarray(zz)))) * 180 / np.pi
         RMSE_dict['crb'].append(DOA_CRB01)
 
-        # 计算RMSE
+        # Compute RMSE
         for key in RMSE_dict.keys():
             if key == 'crb':
                 continue
@@ -486,7 +490,7 @@ def main():
             rmse = np.sqrt(np.sum(MSE_dict[key]) / (num_epoch * K))
             RMSE_dict[key].append(rmse)
 
-        # 打印RMSE汇总
+        # Print RMSE summary
         print(f"\n===== {decision}={rho} =====")
         print(f"  ocdoa={RMSE_dict['ocdoa'][-1]:.4f}" if model_config['run_ocdoa'] else "", end="")
 
@@ -497,7 +501,7 @@ def main():
         print(f"  CBF_01={RMSE_dict['CBF_01'][-1]:.4f}" if model_config['run_cbf'] else "")
         print(f"  HMCViT={RMSE_dict['hmcvit'][-1]:.4f}" if model_config['run_hmcvit'] else "")
 
-    # 绘图
+    # Plotting
     plt.ylabel('RMSE of DOA estimates(degree)', fontsize=10)
     plt.ylim(10 ** (-2), 10 ** 2)
     plt.yscale('log')
@@ -533,7 +537,7 @@ def main():
     plt.grid(linestyle='--')
     plt.tight_layout()
     legend = plt.legend(loc='upper right', bbox_to_anchor=(1, 1), framealpha=0.5, fontsize=10)
-    # 可选：设置图例背景为半透明
+    # Optional: make the legend background semi-transparent
     legend.get_frame().set_alpha(0.5)
 
     if decision in ("power_ratio", "correlation"):
@@ -543,7 +547,7 @@ def main():
 
     os.makedirs('pic_final', exist_ok=True)
     plt.savefig(file_plt, dpi=300, bbox_inches='tight')
-    print(f"\n图形已保存到: {file_plt}")
+    print(f"\nFigure saved to: {file_plt}")
 
     # Save RMSE table to CSV
     csv_path = f'./pic_final/{ts_prefix}_{decision}_RMSE.csv'
@@ -564,8 +568,8 @@ def main():
         f.write(header + '\n')
         for name, data in methods:
             f.write(name + ',' + ','.join([f'{v:.4f}' for v in data]) + '\n')
-    print(f"RMSE表格已保存到: {csv_path}")
-    print(f"总运行时间: {time.time() - t0:.2f}秒")
+    print(f"RMSE table saved to: {csv_path}")
+    print(f"Total run time: {time.time() - t0:.2f} s")
 
 
 if __name__ == '__main__':
