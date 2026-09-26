@@ -1,4 +1,4 @@
-# OC-DOA: Deep Learning Framework using Orthogonal Coefficient Supervision for High-Accuracy Gridless DOA Estimation
+# OC-DOA: Lightweight CNN Framework Using Orthogonal Coefficient Supervision for High-Accuracy Off-grid DOA Estimation
 
 Code for the paper **"OC-DOA"** — direction-of-arrival (DOA) estimation using
 orthogonal coefficient supervision, benchmarked against HMC-ViT, LowSNR-CNN,
